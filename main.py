@@ -39,8 +39,6 @@ def publishServiceOnline(repo, name):
         for content_file in contents:
             c = repo.get_contents(content_file.path)
             decoded_content = base64.b64decode(c.content).decode("utf-8")
-            print(decoded_content, "- " + name in decoded_content,
-                  "resolved: false" in decoded_content)
             if "- " + name in decoded_content and "resolved: false" in decoded_content:
                 date = datetime.utcnow().isoformat("T") + "Z"
                 newContent = decoded_content.replace(
