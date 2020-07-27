@@ -1,0 +1,30 @@
+{
+  "token": "YOUR_GITHUB_TOKEN",
+  "repo": "thuhole/status",
+  "tasks": [
+    {
+      "Category": "Main",
+      "Name": "API",
+      "URL": "https://thuhole.com/",
+      "Code": 200
+    },
+    {
+      "Category": "Main",
+      "Name": "Images",
+      "URL": "https://img.thuhole.com",
+      "Code": 403
+    },
+    {
+      "Category": "Reference",
+      "Name": "Zhihu",
+      "URL": "https://www.zhihu.com",
+      "Code": 200
+    },
+    {
+      "Category": "Reference",
+      "Name": "Google",
+      "URL": "https://www.google.com/gen_204",
+      "Code": 204
+    }
+  ]
+}
