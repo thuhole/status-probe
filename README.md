@@ -24,4 +24,4 @@ Copy `config.json.example` to `config.json`, then edit:
 
 ## What's `Reference` for?
 
-`Reference` websites are assumed to have 100% uptime. If `Reference` website is offline, your services' offline won't be counted. You can use popular websites like Google as `Reference` websites.
+`Reference` websites are assumed to have 100% uptime. If any `Reference` website is offline, your services' offline won't be counted. You can use popular websites like Google as `Reference` websites.

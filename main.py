@@ -1,61 +1,56 @@
-from github import Github
-from datetime import datetime
-import os
-import logging
-import requests
 import json
-import hashlib
+import logging
+import threading
 import time
-import base64
+from datetime import datetime
+from enum import Enum
+
+import requests
+from github import Github
 
 REFRESH_INTERVAL = 60
 TIMEOUT = 10
 TOLERATE_FAIL_TIMES = 2
 
-logging.basicConfig(level=logging.DEBUG,
-                    format="%(asctime)s %(name)-12s %(levelname)-8s %(message)s")
+logging.basicConfig(level=logging.DEBUG, handlers=[])
+logger = logging.getLogger('MAIN')
+c_handler = logging.StreamHandler()
+f_handler = logging.FileHandler('warning.log')
+c_handler.setLevel(logging.DEBUG)
+f_handler.setLevel(logging.WARNING)
+c_format = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+f_format = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+# %(asctime)s %(name)-12s %(levelname)-8s %(message)s
+c_handler.setFormatter(c_format)
+f_handler.setFormatter(f_format)
+logger.addHandler(c_handler)
+logger.addHandler(f_handler)
+
+unresolvedIssues = {}
+condition = threading.Condition()
+q = []
 
 
-def checkConnection(url, code):
-    try:
-        r = requests.get(
-            url, headers={"User-Agent": "cState_Probe/0.0.1"}, timeout=TIMEOUT, allow_redirects=False)
-        logging.debug(str(r.elapsed.total_seconds()) +
-                      "s elapsed to get " + url)
-        if r.status_code == code:
-            return True
-        else:
-            logging.warning("inconsistent status code for " + url +
-                            ", expecting " + str(code) + ", got " + str(r.status_code))
-            return False
-    except Exception as e:
-        logging.warning("failed to get " + url + ", err=" + str(e))
-        return False
+class TaskType(Enum):
+    OFFLINE = 0
+    ONLINE = 1
 
 
-def publishServiceOnline(repo, name):
-    try:
-        contents = repo.get_contents("content/issues/")
-        for content_file in contents:
-            c = repo.get_contents(content_file.path)
-            decoded_content = base64.b64decode(c.content).decode("utf-8")
-            if "- " + name in decoded_content and "resolved: false" in decoded_content:
-                date = datetime.utcnow().isoformat("T") + "Z"
-                newContent = decoded_content.replace(
-                    "resolved: false", "resolved: true")
-                newContent = newContent.replace(
-                    "resolvedWhen: \"\"", "resolvedWhen: " + date)
-                repo.update_file(c.path,
-                                 "update " + c.name, newContent, c.sha)
-                return
-    except Exception as e:
-        logging.warning("error while publishServiceOnline, err=" + str(e))
+class Task:
+    def __init__(self, taskType, name, date):
+        self.taskType = taskType
+        self.date = date
+        self.name = name
 
+    def run(self):
+        if self.taskType == TaskType.OFFLINE:
+            return self.publishOffline()
+        elif self.taskType == TaskType.ONLINE:
+            return self.publishOnline()
 
-def publishServiceOffline(repo, name):
-    filename = datetime.now().strftime("%Y-%m-%d %H:%M:%S.md")
-    date = datetime.utcnow().isoformat("T") + "Z"
-    content = """---
+    def publishOffline(self):
+        try:
+            content = """---
 section: issue
 title: Disruption Detected
 date: {}
@@ -69,12 +64,105 @@ severity: disrupted
 *Investigating* - We are investigating a potential issue that might affect the uptime of one our of services. We are sorry for any inconvenience this may cause you. This incident post will be updated once we have more information.
 
 This is an automatic post by a monitor bot.
-""".format(date, name)
+        """.format(self.date, self.name)
+            filename = date + ".md"
+            r = repo.create_file("content/issues/" + filename,
+                                 "create " + filename, content)
+            unresolvedIssues[self.name] = {
+                "filename": filename,
+                "fileSha": r["content"]["sha"],
+                "content": content
+            }
+            return None
+        except Exception as e:
+            logger.warning("failed to create file at GitHub, err=" + str(e))
+            return e
+
+    def publishOnline(self):
+        try:
+            if self.name not in unresolvedIssues:
+                raise Exception("No unresolved record in dictionary for " + self.name)
+            data = unresolvedIssues[self.name]
+            newContent = data["content"].replace("resolved: false", "resolved: true")
+            newContent = newContent.replace("resolvedWhen: \"\"", "resolvedWhen: " + self.date)
+            repo.update_file("content/issues/" + data["filename"],
+                             "update " + data["filename"], newContent, data["fileSha"])
+            return None
+        except Exception as e:
+            logger.warning("failed to update file at GitHub, err=" + str(e))
+            return e
+
+
+def checkConnection(url, code):
     try:
-        repo.create_file("content/issues/" + filename,
-                         "create " + filename, content)
+        r = requests.get(url, headers={"User-Agent": "cState_Probe/0.0.1"}, timeout=TIMEOUT, allow_redirects=False)
+        logger.debug(str(r.elapsed.total_seconds()) + "s elapsed to get " + url)
+        if r.status_code == code:
+            return True
+        else:
+            logger.warning("inconsistent status code for " + url +
+                           ", expecting " + str(code) + ", got " + str(r.status_code))
+            return False
     except Exception as e:
-        logging.warning("failed to create file at GitHub, err=" + str(e))
+        logger.warning("failed to get " + url + ", err=" + str(e))
+        return False
+
+
+class ProducerThread(threading.Thread):
+    def __init__(self):
+        super(ProducerThread, self).__init__()
+
+    def run(self):
+        while True:
+            for task in tasks:
+                task["now_success"] = checkConnection(task["URL"], task["Code"])
+
+            reference_success = all([x["now_success"] for x in tasks if x["Category"] == "Reference"])
+            for task in tasks:
+                if task["Category"] != "Reference":
+                    relative_success = (not reference_success) or task["now_success"]
+                    task["relative_success"] = relative_success
+
+                    if relative_success and (not task["last_success"]):
+                        logger.warning(task["Name"] + " online!")
+
+                        condition.acquire()
+                        q.append(Task(TaskType.ONLINE, task["Name"], datetime.utcnow().isoformat("T") + "Z"))
+                        condition.notify()
+                        condition.release()
+                    elif (not relative_success) and task["last_success"]:
+                        logger.warning(task["Name"] + " offline!")
+
+                        condition.acquire()
+                        q.apped(Task(TaskType.OFFLINE, task["Name"], datetime.utcnow().isoformat("T") + "Z"))
+                        condition.notify()
+                        condition.release()
+                    else:
+                        logger.info(task["Name"] + " status no change")
+
+                    task["last_success"] = task["relative_success"]
+            time.sleep(REFRESH_INTERVAL)
+
+
+class ConsumerThread(threading.Thread):
+    def __init__(self):
+        super(ConsumerThread, self).__init__()
+
+    def run(self):
+        while True:
+            condition.acquire()
+            if not q:
+                logger.debug("Consumer waiting...")
+                condition.wait()
+                logger.debug("Consumer waiting ended.")
+            item = q.pop(0)
+            condition.release()
+
+            e = item.run()
+            if e is not None:
+                condition.acquire()
+                q.append(item)  # Put the task back if error occurred.
+                condition.release()
 
 
 if __name__ == '__main__':
@@ -87,26 +175,8 @@ if __name__ == '__main__':
     for task in tasks:
         task["last_success"] = True
 
-    while True:
-        for task in tasks:
-            task["now_success"] = checkConnection(task["URL"], task["Code"])
+    p = ProducerThread()
+    c = ConsumerThread()
 
-        reference_success = all([x["now_success"]
-                                 for x in tasks if x["Category"] == "Reference"])
-        for task in tasks:
-            if task["Category"] != "Reference":
-                relative_success = (
-                    not reference_success) or task["now_success"]
-                task["relative_success"] = relative_success
-
-                if relative_success and (not task["last_success"]):
-                    logging.warning(task["Name"] + " online!")
-                    publishServiceOnline(repo, task["Name"])
-                elif (not relative_success) and task["last_success"]:
-                    logging.warning(task["Name"] + " offline!")
-                    publishServiceOffline(repo, task["Name"])
-                else:
-                    logging.info(task["Name"] + " status no change")
-
-                task["last_success"] = task["relative_success"]
-        time.sleep(REFRESH_INTERVAL)
+    p.start()
+    c.start()
