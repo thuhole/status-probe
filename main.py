@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 import threading
 import time
 from datetime import datetime
@@ -65,14 +66,15 @@ severity: disrupted
 
 This is an automatic post by a monitor bot.
         """.format(self.date, self.name)
-            filename = date + ".md"
+            filename = self.date + ".md"
             r = repo.create_file("content/issues/" + filename,
                                  "create " + filename, content)
             unresolvedIssues[self.name] = {
                 "filename": filename,
-                "fileSha": r["content"]["sha"],
+                "fileSha": r["content"].sha,
                 "content": content
             }
+            logger.info("GitHub file created.")
             return None
         except Exception as e:
             logger.warning("failed to create file at GitHub, err=" + str(e))
@@ -87,6 +89,7 @@ This is an automatic post by a monitor bot.
             newContent = newContent.replace("resolvedWhen: \"\"", "resolvedWhen: " + self.date)
             repo.update_file("content/issues/" + data["filename"],
                              "update " + data["filename"], newContent, data["fileSha"])
+            logger.info("GitHub file updated.")
             return None
         except Exception as e:
             logger.warning("failed to update file at GitHub, err=" + str(e))
@@ -134,7 +137,7 @@ class ProducerThread(threading.Thread):
                         logger.warning(task["Name"] + " offline!")
 
                         condition.acquire()
-                        q.apped(Task(TaskType.OFFLINE, task["Name"], datetime.utcnow().isoformat("T") + "Z"))
+                        q.append(Task(TaskType.OFFLINE, task["Name"], datetime.utcnow().isoformat("T") + "Z"))
                         condition.notify()
                         condition.release()
                     else:
@@ -163,6 +166,7 @@ class ConsumerThread(threading.Thread):
                 condition.acquire()
                 q.append(item)  # Put the task back if error occurred.
                 condition.release()
+            time.sleep(random.random())
 
 
 if __name__ == '__main__':
