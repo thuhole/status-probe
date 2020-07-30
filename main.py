@@ -89,6 +89,7 @@ This is an automatic post by a monitor bot.
             newContent = newContent.replace("resolvedWhen: \"\"", "resolvedWhen: " + self.date)
             repo.update_file("content/issues/" + data["filename"],
                              "update " + data["filename"], newContent, data["fileSha"])
+            unresolvedIssues.pop(self.name)
             logger.info("GitHub file updated.")
             return None
         except Exception as e:
