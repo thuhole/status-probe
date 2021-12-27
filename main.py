@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 import requests
+import socket
 from github import Github
 
 REFRESH_INTERVAL = 60
@@ -53,7 +54,7 @@ class Task:
         try:
             content = """---
 section: issue
-title: Disruption Detected
+title: Disruption Detected: {}
 date: {}
 resolved: false
 informational: false
@@ -65,7 +66,7 @@ severity: disrupted
 *Investigating* - We are investigating a potential issue that might affect the uptime of one our of services. We are sorry for any inconvenience this may cause you. This incident post will be updated once we have more information.
 
 This is an automatic post by a monitor bot.
-        """.format(self.date, self.name)
+        """.format(self.name, self.date, self.name)
             filename = self.date + ".md"
             r = repo.create_file("content/issues/" + filename,
                                  "create " + filename, content)
@@ -97,19 +98,29 @@ This is an automatic post by a monitor bot.
             return e
 
 
-def checkConnection(url, code):
-    try:
-        r = requests.get(url, headers={"User-Agent": "cState_Probe/0.0.1"}, timeout=TIMEOUT, allow_redirects=False)
-        logger.debug(str(r.elapsed.total_seconds()) + "s elapsed to get " + url)
-        if r.status_code == code:
-            return True
-        else:
-            logger.warning("inconsistent status code for " + url +
-                           ", expecting " + str(code) + ", got " + str(r.status_code))
+def checkConnection(url, code, scheme):
+    if scheme.upper() == "HTTP":
+        try:
+            r = requests.get(url, headers={"User-Agent": "cState_Probe/0.0.1"}, timeout=TIMEOUT, allow_redirects=False)
+            logger.debug(str(r.elapsed.total_seconds()) + "s elapsed to get " + url)
+            if r.status_code == code:
+                return True
+            else:
+                logger.warning("inconsistent status code for " + url +
+                            ", expecting " + str(code) + ", got " + str(r.status_code))
+                return False
+        except Exception as e:
+            logger.warning('failed to get ' + url + ', err=' + str(e))
             return False
-    except Exception as e:
-        logger.warning("failed to get " + url + ", err=" + str(e))
-        return False
+    elif scheme.upper() == "TCP":
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((url, int(code)))
+            s.shutdown(2)
+            return True
+        except Exception as e:
+            logger.warning(f'failed to connect to socket {url}:{code} err={e}')
+            return False
 
 
 class ProducerThread(threading.Thread):
@@ -119,7 +130,7 @@ class ProducerThread(threading.Thread):
     def run(self):
         while True:
             for task in tasks:
-                task["now_success"] = checkConnection(task["URL"], task["Code"])
+                task["now_success"] = checkConnection(task["URL"], task["Code"], task["Scheme"])
 
             reference_success = all([x["now_success"] for x in tasks if x["Category"] == "Reference"])
             for task in tasks:

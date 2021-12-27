@@ -3,28 +3,32 @@
   "repo": "thuhole/status",
   "tasks": [
     {
-      "Category": "Main",
-      "Name": "API",
-      "URL": "https://thuhole.com/",
-      "Code": 200
+      "Category": "Main Services",
+      "Name": "FTP",
+      "URL": "thuhole.com",
+      "Code": 21,
+      "Scheme": "tcp",
     },
     {
-      "Category": "Main",
+      "Category": "Main Website",
       "Name": "Images",
       "URL": "https://img.thuhole.com",
-      "Code": 403
+      "Code": 403,
+      "Scheme": "http"
     },
     {
       "Category": "Reference",
       "Name": "Zhihu",
       "URL": "https://www.zhihu.com",
-      "Code": 302
+      "Code": 302,
+      "Scheme": "http"
     },
     {
       "Category": "Reference",
       "Name": "Google",
       "URL": "https://www.google.com/gen_204",
-      "Code": 204
-    }
+      "Code": 204,
+      "Scheme": "http"
+    },
   ]
 }
