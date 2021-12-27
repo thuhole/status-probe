@@ -54,7 +54,7 @@ class Task:
         try:
             content = """---
 section: issue
-title: Disruption Detected: {}
+title: Disruption Detected - {}
 date: {}
 resolved: false
 informational: false
