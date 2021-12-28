@@ -19,8 +19,9 @@ Copy `config.json.example` to `config.json`, then edit:
 - `tasks`: Websites you wanna monitor
   - `Category`: `Reference` or _Whatever you like_
   - `Name`: The system name in your [cState config.yml](https://github.com/cstate/example/blob/master/config.yml)
-  - `URL`: The HTTP GET url you want to monitor
-  - `Code`: The expecting status code
+  - `URL`: The HTTP GET url you want to monitor *or* the hostname or IP address to check
+  - `Code`: The expecting status code *or* the port you want to check
+  - `Scheme`: Either HTTP or TCP. Note that the TCP scheme expects `URL` to be an IP or hostname, and `Code` to be a port. View the `congfig.json.example` for more info
 
 ## What's `Reference` for?
 
