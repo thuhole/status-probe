@@ -63,7 +63,7 @@ affected:
   - {}
 severity: disrupted
 ---
-*Investigating* - We are investigating a potential issue that might affect the uptime of one our services. We are sorry for any inconveniences this may cause you. This incident post will be updated once we have more information.
+*Investigating* - We are investigating a potential issue that might affect the uptime of one of our services. We are sorry for any inconveniences this may cause you. This incident post will be updated once we have more information.
 
 This is an automatic post by a monitor bot.
         """.format(self.name, self.date, self.name)
